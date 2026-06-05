@@ -1,6 +1,7 @@
 const express= require('express')
 const app=express()
 const cors=require('cors')
+const admin = require("firebase-admin");
 require('dotenv').config();
 
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -10,6 +11,35 @@ const port=process.env.PORT || 3000;
 // #middleware
 app.use(cors());
 app.use(express.json())
+
+const serviceAccount = require("./snekers-deals-firebase-admin-key.json");
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+// JWT
+const verifyToken =async(req,res,next) =>{
+  const authHeader=req.headers.authorization;
+  if(!authHeader){
+    return res.status(401).send({message:"Unauthorized"})
+  }
+  const token=authHeader.split(" ")[1]
+  if(!token){
+       return res.status(401).send({message:"Unauthorized"})
+ 
+  }
+  try {
+    const decoded=await admin.auth().verifyIdToken(token)
+    req.decoded=decoded
+    // console.log(decoded)
+    next()
+  } catch  {
+           return res.status(403).send({message:"Forbidden"})
+
+  }
+
+}
+
 
 // userName :nikeproductdb
 // password: 3YhQSkBo0weA48dy
@@ -153,7 +183,7 @@ res.send(result)
 //------------ #Bids part Api-------------------
 
 // GET API FOR BIDS
-app.get('/bids',async(req,res) =>{
+app.get('/bids',verifyToken,async(req,res) =>{
   const result=await bidsColl.find().toArray()
   res.send(result)
 })
@@ -185,13 +215,18 @@ app.delete('/bids/:id',async(req,res) => {
 
 //  GET USER BID BY THEIR EMAIL
 
-app.get('/users/bids', async (req, res) => {
+app.get('/users/bids',verifyToken, async (req, res) => {
+  // console.log('token',req.headers.authorization)
 
   const email = req.query.email;
 const query={}
+if(email !== req.decoded.email){
+  return res.status(403).send({message:"Forbidden"})
+}
  if(email){
   query.buyer_email=email
  }
+
 
   const result = await bidsColl.find(query).toArray();
 
